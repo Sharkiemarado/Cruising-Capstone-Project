@@ -1,0 +1,96 @@
+--Install Tidyverse
+install.packages("tidyverse")
+library("tidyverse")
+
+--Convert "Joined Cruise Data" (imported from MySQL) to Cruise Data and read file
+cruise_data <- read.csv("Joined Cruise Data.csv", sep = ";", stringsAsFactors = FALSE)
+
+--View Average guest compensation for incidents in descending order by Voyage ID and Cabin type
+comp_summary <- cruise_data %>%
+  group_by(Voyage_ID, Cabin_Type) %>%
+  summarise(
+    avg_guest_comp = mean(as.numeric(Guest_Comp_Amount), na.rm = TRUE),
+    avg_logged_comp = mean(as.numeric(Logged_Comp_Amount), na.rm = TRUE),
+    count = n()
+  ) %>%
+  arrange(desc(avg_guest_comp))
+
+-- View result
+print(comp_summary)
+
+--Create a point plot titled "Avg Guest Compensation by Cabin Type and Voyage"
+
+ggplot(comp_summary, aes(x = Cabin_Type, y = avg_guest_comp, fill = Voyage_ID)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average Guest Compensation by Cabin Type and Voyage",
+       x = "Cabin Type", y = "Average Guest Compensation") +
+  theme_minimal()
+
+-- Zero out null values
+cruise_data$Guest_Comp_Amount[is.na(cruise_data$Guest_Comp_Amount)] <- 0
+cruise_data$Logged_Comp_Amount[is.na(cruise_data$Logged_Comp_Amount)] <- 0
+cruise_data$NPS_Score[is.na(cruise_data$NPS_Score)] <- 0
+cruise_data$Guest_Reported_Category[cruise_data$Guest_Reported_Category == ""] <- NA
+
+-- View to check that there are no nulls
+View(cruise_data)
+
+-- Clean spacing and casing
+cruise_data$Logged_Incident_Category <- cruise_data$Logged_Incident_Category |>
+  trimws() |>
+  tolower()
+
+-- Replace all known variants of "stateroom" with correct lowercase version
+cruise_data$Logged_Incident_Category <- gsub(
+  "state room|stateroom |staterooms|staterroom|stateroom|staTeroom|statEroom", 
+  "stateroom", 
+  cruise_data$Logged_Incident_Category, 
+  ignore.case = TRUE
+)
+sort(unique(cruise_data$Logged_Incident_Category))
+
+
+--Trim all Guest Comp Types
+write.csv(cruise_data, "cleaned_cruise_data.csv", row.names = FALSE)
+cruise_data$Guest_Comp_Type <- trimws(cruise_data$Guest_Comp_Type)
+cruise_data$Guest_Comp_Type <- tolower(cruise_data$Guest_Comp_Type)
+cruise_data$Guest_Comp_Type <- ifelse(
+  cruise_data$Guest_Comp_Type == "refund",
+  "Refund",
+  cruise_data$Guest_Comp_Type
+)
+
+--Check trimmed comp types
+unique(cruise_data$Guest_Comp_Type)
+
+--Define Low NPS score
+cruise_data <- cruise_data %>%
+  mutate(Low_NPS = ifelse(as.numeric(NPS_Score) <= 6, 1, 0))
+
+-- Check low NPS by Cabin Type
+cruise_data %>%
+  group_by(Cabin_Type) %>%
+  summarise(
+    Low_NPS_Rate = mean(Low_NPS, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  arrange(desc(Low_NPS_Rate))
+-- Check low NPS by Loyalty Tier
+cruise_data %>%
+  group_by(Loyalty_Tier) %>%
+  summarise(
+    Low_NPS_Rate = mean(Low_NPS, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  arrange(desc(Low_NPS_Rate))
+
+-- Check low NPS by Guest_Reported_Category
+cruise_data %>%
+  group_by(Guest_Reported_Category) %>%
+  summarise(
+    Low_NPS_Rate = mean(Low_NPS, na.rm = TRUE),
+    Count = n()
+  ) %>%
+  arrange(desc(Low_NPS_Rate))
+
+
